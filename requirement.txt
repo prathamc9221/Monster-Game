@@ -1,1 +1,2 @@
 1) Set an Environment for Android Studio and install any Android Simulator to run the game.
+2) Fix versions of Gradle. 
