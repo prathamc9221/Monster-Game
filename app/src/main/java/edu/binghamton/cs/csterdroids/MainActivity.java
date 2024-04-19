@@ -20,7 +20,10 @@ import android.widget.Button;
 //import com.example.myapp.GameActivity;
 
 import java.util.Random;
-
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v7.app.AppCompatActivity;
+import android.widget.TextView;
 
 
 
@@ -49,6 +52,36 @@ class Boulder {
 
     public void draw(Canvas canvas, Paint paint) {
         canvas.drawBitmap(stickerBitmap, x - side / 2, y - side / 2, paint);
+
+    }
+}
+
+class ObjectThrown {
+    float x, y, dx, dy, side;
+    float width, height;
+    Bitmap objectBitmap;
+
+    ObjectThrown(Bitmap bitmap) {
+        objectBitmap = bitmap;
+        side = Math.max(objectBitmap.getWidth(), objectBitmap.getHeight());
+    }
+
+    public void update() {
+        x += dx;
+        y += dy;
+
+        // Check for collisions with screen boundaries
+        if (x < 0 || x > width) {
+            dx = -dx; // Reverse in direction with double speed
+        }
+        if (y < 0 || y > height) {
+            dy = -dy; // Reverse the direction in y-axis
+        }
+    }
+
+    public void draw(Canvas canvas, Paint paint) {
+        canvas.drawBitmap(objectBitmap, x - side / 2, y - side / 2, paint);
+
     }
 }
 
@@ -118,8 +151,6 @@ class Ship {
 }
 
 
-
-
 public class MainActivity extends AppCompatActivity {
 
     AsteroidView asteroidView;
@@ -131,31 +162,6 @@ public class MainActivity extends AppCompatActivity {
         // setContentView(R.layout.activity_main);
         asteroidView = new AsteroidView(this);
         setContentView(asteroidView);
-/*
-        setContentView(R.layout.activity_main);
-
-        // Find the start button in the layout
-        Button startButton = findViewById(R.id.start_button);
-
-        if (startButton != null) {
-            startButton.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    // Handle button click event
-                }
-            });
-        } else {
-            Log.e("MainActivity", "Button not found in layout");
-        }
-*/
-        // Set OnClickListener for the start button
-        /*startButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Start the game activity when the button is clicked
-                startGameActivity();
-            }
-        });*/
 
     }
 
@@ -192,6 +198,9 @@ public class MainActivity extends AppCompatActivity {
         Bitmap stickerBitmap;
         int screenWidth, screenHeight;
 
+        ObjectThrown[] objectsThrown;
+        Bitmap objectBitmap;
+
 
         public AsteroidView(Context context) {
             super(context);
@@ -224,6 +233,16 @@ public class MainActivity extends AppCompatActivity {
             ship.x = 300; // Set initial x position of the ship
             ship.y = 300; // Set initial y position of the ship
             ship.sideLength = 50;
+
+
+            objectBitmap = BitmapFactory.decodeResource(context.getResources(), R.drawable.thrown_object);
+            float scaleFactor1 = 0.1f; // Adjust the scale factor as needed
+            objectBitmap = Bitmap.createScaledBitmap(objectBitmap, (int)(objectBitmap.getWidth() * scaleFactor1), (int)(objectBitmap.getHeight() * scaleFactor1), false);
+            objectsThrown = new ObjectThrown[15]; // Adjust the size as needed
+            for (int i = 0; i < objectsThrown.length; i++) {
+                objectsThrown[i] = new ObjectThrown(objectBitmap);
+            }
+
 
 
         }
@@ -265,9 +284,11 @@ public class MainActivity extends AppCompatActivity {
                         paused = false;
                         return true; // Consume the event
                     }
-
-                    // Handle other touch events (e.g., ship movement) if the game is not paused
-                    // Your existing touch event handling code goes here...
+                /*if (event.getAction() == MotionEvent.ACTION_DOWN && paused) {
+                    // If the game is paused and user taps the screen, resume the game
+                    paused = false;
+                    return true; // Consume the event
+                }*/
 
 
 
@@ -311,13 +332,14 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void run() {
             Random r = new Random();
-            b = new Boulder[5];
+            b = new Boulder[10];
+            objectsThrown = new ObjectThrown[10];
             posx = 50;
             posy = 50;
             dx = 20;
             dy = 45;
 
-            for (int i = 0; i < 5; ++i) {
+            for (int i = 0; i < 10; ++i) {
                 b[i] = new Boulder(stickerBitmap);
                 b[i].x = r.nextInt(50);
                 b[i].y = r.nextInt(50);
@@ -326,12 +348,22 @@ public class MainActivity extends AppCompatActivity {
                 b[i].side = 95;
             }
 
+            for (int i = 0; i < 10; ++i) {
+                objectsThrown[i] = new ObjectThrown(objectBitmap);
+                objectsThrown[i].x = r.nextInt(50);
+                objectsThrown[i].y = r.nextInt(50);
+                objectsThrown[i].dx = r.nextInt(30) - 15;
+                objectsThrown[i].dy = r.nextInt(30) - 15;
+                objectsThrown[i].side = 95;
+            }
+
 
 
             while (playing) {
                 if (!paused) {
                     update();
                 }
+
                 draw();
                 try {
                     Thread.sleep(50);
@@ -339,6 +371,8 @@ public class MainActivity extends AppCompatActivity {
                     e.printStackTrace();
                 }
             }
+
+
 
         }
 
@@ -358,53 +392,121 @@ public class MainActivity extends AppCompatActivity {
                     avoidedCollisionTimeSeconds += elapsedTimeMillis;
                 }
 
+                int activeBoulders = 0; // Count of active boulders
+
                 // Check for collision with boulders
-                for (int i = 0; i < 5; ++i) {
+                for (int i = 0; i < 10; ++i) {
                     if (isCollision(ship, b[i])) {
                         b[i].x = -100; // Move the boulder off-screen
                         b[i].y = -100;
                         ++score; // Increase the score when a boulder is destroyed
-                        ++i;
-                        if(i==3){avoidedCollisionTimeSeconds=0;}
-                        // Pause the game
-                        //paused = true;
-                        return; // Exit the update loop
+
+                        if (score == 10) { // If the score reaches 10
+                            paused = true;
+                        }
+                    }
+
+                    if (isCollision(ship, objectsThrown[i])) {
+                        objectsThrown[i].x = -100; // Move the boulder off-screen
+                        objectsThrown[i].y = -100;
+                        //++score; // Increase the score when a boulder is destroyed
+
+                        //if (score == 10) { // If the score reaches 10
+                            paused = true;
+
                     }
                 }
+
 
                 //Boulder[] stickers;/*
                 for (Boulder sticker : b) {
                     sticker.update();
                 }
+                for (ObjectThrown sticker1 : objectsThrown) {
+                    sticker1.update();
+                }
 
                 // Update boulders position
-                for (int i = 0; i < 5; ++i)
+                for (int i = 0; i < 10; ++i)
                     b[i].update();
+
+                for (int i = 0; i < objectsThrown.length; i++) {
+                    objectsThrown[i].update();
+                }
+                System.out.println("Hello");
+
+
+                long currentTimeMillis1 = System.currentTimeMillis();
+                if (currentTimeMillis1 - resumeTimeMillis > 3000) {
+                    for (int i = 0; i < 6; ++i) {
+                        if (objectsThrown[i].x < 0 || objectsThrown[i].x > width || objectsThrown[i].y < 0 || objectsThrown[i].y > height) {
+                            // Reset the boulder position
+                            objectsThrown[i].x = r.nextInt(50);
+                            objectsThrown[i].y = r.nextInt(50);
+                            objectsThrown[i].dx = r.nextInt(30) - 15;
+                            objectsThrown[i].dy = r.nextInt(30) - 15;
+                            objectsThrown[i].side = 95;
+
+                            break; // Create only one boulder at a time
+                        }
+                        if (b[i].x < 0 || b[i].x > width || b[i].y < 0 || b[i].y > height) {
+                            // Reset the boulder position
+                            b[i].x = r.nextInt(50);
+                            b[i].y = r.nextInt(50);
+                            b[i].dx = r.nextInt(30) - 15;
+                            b[i].dy = r.nextInt(30) - 15;
+                            b[i].side = 95;
+
+                            break; // Create only one boulder at a time
+                        }
+                    }
+                    resumeTimeMillis = currentTimeMillis1; // Update the last creation time
+                }
 
 
                 // Create new boulder after every 8 seconds
                 long currentTimeMillis = System.currentTimeMillis();
-                if (currentTimeMillis - resumeTimeMillis > 5000) {
-                    for (int i = 0; i < 5; ++i) {
+                if (currentTimeMillis - resumeTimeMillis > 3000) {
+                    for (int i = 0; i < 6; ++i) {
                         if (b[i].x < 0 || b[i].x > width || b[i].y < 0 || b[i].y > height) {
                             // Reset the boulder position
-                            b[i].x = r.nextInt(width);
-                            b[i].y = r.nextInt(height);
-                            b[i].dx = r.nextInt(30) - 15;
-                            b[i].dy = r.nextInt(30) - 15;
-                            b[i].side = 95;
-                            break; // Create only one boulder at a time
+                                b[i].x = r.nextInt(50);
+                                b[i].y = r.nextInt(50);
+                                b[i].dx = r.nextInt(30) - 15;
+                                b[i].dy = r.nextInt(30) - 15;
+                                b[i].side = 95;
+
+                                break; // Create only one boulder at a time
                         }
                     }
                     resumeTimeMillis = currentTimeMillis; // Update the last creation time
                 }
+
+
             }
+
+
         }
 
 
 
         // Method to check collision between ship and boulder
         private boolean isCollision(Ship ship, Boulder boulder) {
+            // Calculate distance between ship and boulder's center
+
+            if (boulder == null) {
+                return false;
+            }
+
+            float dx = ship.x - boulder.x;
+            float dy = ship.y - boulder.y;
+            float distance = (float) Math.sqrt(dx * dx + dy * dy);
+
+            // Check if the distance is less than the sum of ship's half side length and boulder's radius
+            return distance < (ship.sideLength*3)/5  + boulder.side;
+        }
+
+        private boolean isCollision(Ship ship, ObjectThrown boulder) {
             // Calculate distance between ship and boulder's center
 
             if (boulder == null) {
@@ -429,6 +531,11 @@ public class MainActivity extends AppCompatActivity {
                 width = canvas.getWidth();
                 height = canvas.getHeight();
 
+                if(width < 0)
+                    width = width*-1;
+                if(height < 0)
+                    height = height*-1;
+
                 // Draw the background color
                 canvas.drawColor(Color.argb(255, 0, 0, 0));
 
@@ -436,6 +543,10 @@ public class MainActivity extends AppCompatActivity {
 
                 for (Boulder sticker : b) {
                     sticker.draw(canvas, paint);
+                }
+
+                for (ObjectThrown object : objectsThrown) {
+                    object.draw(canvas, paint);
                 }
 
                 // Draw the score text
@@ -470,6 +581,14 @@ public class MainActivity extends AppCompatActivity {
                     b[i].width = width;
                     b[i].height = height;
                     b[i].draw(canvas, paint);
+                }
+
+                for (int i = 0; i < 5; ++i) {
+                    //b[i].width = r.nextInt(width);
+                    //b[i].height = r.nextInt(height);
+                    objectsThrown[i].width = width;
+                    objectsThrown[i].height = height;
+                    objectsThrown[i].draw(canvas, paint);
                 }
 
                 // canvas.drawCircle(b.x, b.y, 50, paint);
